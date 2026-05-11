@@ -1,0 +1,44 @@
+server:
+  port: 9900
+
+spring:
+  application:
+    name: super-biz-agent
+
+  # 你的 API Key 已经放在 IDEA 环境变量中
+  # Run Configuration -> Environment variables -> DASHSCOPE_API_KEY=xxx
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: qwen-turbo
+          temperature: 0.7
+          max-tokens: 2048
+          top-p: 0.9
+# 日志
+logging:
+  level:
+    org.example: info
+    com.alibaba.cloud.ai: info
+# DashScope Embedding 预留配置（后续接向量化时会用到）
+dashscope:
+  api:
+    key: ${DASHSCOPE_API_KEY}
+  embedding:
+    model: text-embedding-v4
+
+# Milvus 预留配置（后续接入 Milvus 客户端时会用到）
+milvus:
+  host: 192.168.38.137
+  port: 19530
+  timeout: 10000
+  username: ""
+  password: ""
+  database: default
+
+# 文档分片预留配置（后续做 RAG 时使用）
+document:
+  chunk:
+    max-size: 800
+    overlap: 100
