@@ -2,9 +2,10 @@ package com.example.super_biz_agent.service;
 
 import com.example.super_biz_agent.dto.ApiResponse;
 import com.example.super_biz_agent.dto.ChatRequest;
-import org.springframework.stereotype.Service;
+import com.example.super_biz_agent.dto.ChatResponse;
 
 
 public interface ChatService {
-    ApiResponse chat(ChatRequest request);
+    ApiResponse<ChatResponse> chat(ChatRequest request);
+
 }
