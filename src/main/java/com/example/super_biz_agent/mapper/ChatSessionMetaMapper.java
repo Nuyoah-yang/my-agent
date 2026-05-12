@@ -5,6 +5,8 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.Delete;
+import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
@@ -32,4 +34,14 @@ public interface ChatSessionMetaMapper {
             "WHERE user_id = #{userId} " +
             "ORDER BY updated_at DESC")
     List<ChatSessionMetaEntity> findByUserId(Long userId);
+
+    @Delete("DELETE FROM chat_session_meta WHERE session_id = #{sessionId}")
+    int deleteBySessionId(String sessionId);
+
+    /**
+     * 仅更新会话标题，不改最后消息时间。
+     */
+    @Update("UPDATE chat_session_meta SET title = #{title}, updated_at = NOW() " +
+            "WHERE session_id = #{sessionId}")
+    int updateTitleBySessionId(@Param("sessionId") String sessionId, @Param("title") String title);
 }

@@ -25,32 +25,20 @@ public class AuthController {
 
     @PostMapping("/register")
     public ApiResponse<AuthResponse> register(@RequestBody RegisterRequest request) {
-        try {
-            // 注册成功后直接返回 access token，前端可立即进入已登录态
-            return ApiResponse.success(authService.register(request));
-        } catch (Exception e) {
-            return ApiResponse.error(e.getMessage());
-        }
+        // 注册成功后直接返回 access token，前端可立即进入已登录态
+        return ApiResponse.success(authService.register(request));
     }
 
     @PostMapping("/login")
     public ApiResponse<AuthResponse> login(@RequestBody LoginRequest request) {
-        try {
-            // 登录返回 token + 用户基础信息，便于前端初始化用户状态
-            return ApiResponse.success(authService.login(request));
-        } catch (Exception e) {
-            return ApiResponse.error(e.getMessage());
-        }
+        // 登录返回 token + 用户基础信息，便于前端初始化用户状态
+        return ApiResponse.success(authService.login(request));
     }
 
     @GetMapping("/me")
     public ApiResponse<UserProfileResponse> me() {
-        try {
-            // 用户身份从 JWT 过滤器注入，不依赖客户端传 userId
-            Long userId = UserContextHolder.getUserId();
-            return ApiResponse.success(authService.getCurrentUserProfile(userId));
-        } catch (Exception e) {
-            return ApiResponse.error(e.getMessage());
-        }
+        // 用户身份从 JWT 过滤器注入，不依赖客户端传 userId
+        Long userId = UserContextHolder.getUserId();
+        return ApiResponse.success(authService.getCurrentUserProfile(userId));
     }
 }

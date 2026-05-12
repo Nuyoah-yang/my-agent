@@ -181,6 +181,64 @@ public class ChatServiceImpl implements ChatService {
         }).toList();
     }
 
+    /**
+     * 删除对应会话
+     * @param sessionId
+     */
+    @Override
+    public void deleteSession(String sessionId) {
+        Long currentUserId = UserContextHolder.getUserId();
+        if (currentUserId == null) {
+            throw new SecurityException("未登录或登录已过期");
+        }
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("sessionId不能为空");
+        }
+
+        ChatSessionMetaEntity sessionMeta = chatSessionMetaMapper.findBySessionId(sessionId);
+        if (sessionMeta == null) {
+            throw new IllegalArgumentException("会话不存在");
+        }
+        if (!currentUserId.equals(sessionMeta.getUserId())) {
+            throw new SecurityException("无权删除该会话");
+        }
+
+        chatSessionMetaMapper.deleteBySessionId(sessionId);
+        chatMemoryRepository.deleteByConversationId(sessionId);
+    }
+
+    /**
+     * 重命名会话标题，仅允许会话归属用户操作。
+     */
+    @Override
+    public void renameSession(String sessionId, String title) {
+        Long currentUserId = UserContextHolder.getUserId();
+        if (currentUserId == null) {
+            throw new SecurityException("未登录或登录已过期");
+        }
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("sessionId不能为空");
+        }
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("标题不能为空");
+        }
+
+        String trimmedTitle = title.trim();
+        if (trimmedTitle.length() > 128) {
+            throw new IllegalArgumentException("标题长度不能超过128");
+        }
+
+        ChatSessionMetaEntity sessionMeta = chatSessionMetaMapper.findBySessionId(sessionId);
+        if (sessionMeta == null) {
+            throw new IllegalArgumentException("会话不存在");
+        }
+        if (!currentUserId.equals(sessionMeta.getUserId())) {
+            throw new SecurityException("无权重命名该会话");
+        }
+
+        chatSessionMetaMapper.updateTitleBySessionId(sessionId, trimmedTitle);
+    }
+
     private void upsertAndValidateSessionOwnership(String sessionId, Long userId, String message) {
         ChatSessionMetaEntity existing = chatSessionMetaMapper.findBySessionId(sessionId);
         if (existing == null) {
@@ -199,8 +257,11 @@ public class ChatServiceImpl implements ChatService {
             throw new SecurityException("无权访问该会话");
         }
 
-        // 归属一致则更新会话元信息，便于后续会话列表排序
-        existing.setTitle(buildTitle(message));
+        // 归属一致则更新会话元信息。
+        // 仅在标题为空或仍为默认值时才自动生成标题，避免覆盖用户手动重命名结果。
+        if (existing.getTitle() == null || existing.getTitle().isBlank() || "新会话".equals(existing.getTitle())) {
+            existing.setTitle(buildTitle(message));
+        }
         existing.setLastMessageAt(LocalDateTime.now());
         chatSessionMetaMapper.updateSessionMeta(existing);
     }

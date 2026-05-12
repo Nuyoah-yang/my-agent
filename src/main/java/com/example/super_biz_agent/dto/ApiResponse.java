@@ -4,7 +4,6 @@ package com.example.super_biz_agent.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.checkerframework.checker.units.qual.A;
 
 @Data
 @AllArgsConstructor
@@ -23,8 +22,15 @@ public  class ApiResponse <T>{
     }
 
     public static <T> ApiResponse<T> error(String message) {
+        return error(500, message);
+    }
+
+    /**
+     * 支持按异常类型返回自定义错误码，便于前后端约定统一的错误语义。
+     */
+    public static <T> ApiResponse<T> error(int code, String message) {
         ApiResponse<T> response = new ApiResponse<>();
-        response.setCode(500);
+        response.setCode(code);
         response.setMessage(message);
         return response;
     }

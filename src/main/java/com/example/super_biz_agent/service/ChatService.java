@@ -15,4 +15,8 @@ public interface ChatService {
     List<ChatSessionItem> listSessions();
 
     List<ChatMessageItem> listMessages(String sessionId);
+
+    void deleteSession(String sessionId);
+
+    void renameSession(String sessionId, String title);
 }

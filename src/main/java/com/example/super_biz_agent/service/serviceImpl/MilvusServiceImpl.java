@@ -9,7 +9,6 @@ import io.milvus.param.collection.ShowCollectionsParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 
 
@@ -18,23 +17,19 @@ public class MilvusServiceImpl implements MilvusService {
 
     @Autowired(required = false)
     private MilvusClient milvusClient;
-    @Override
-    public ApiResponse getState() {
 
+    @Override
+    public ApiResponse<MilvusHealthData> getState() {
+        // 健康检查接口约定：无论 Milvus 是否可用，都返回 200 + 健康状态对象。
         MilvusHealthData data = new MilvusHealthData();
 
-        try{
-            //构建请求
+        try {
+            // 若客户端未注入或调用异常，都会进入 catch 分支并返回 unhealthy。
             ShowCollectionsParam param = ShowCollectionsParam.newBuilder().build();
-            //客户端调用
             milvusClient.showCollections(param);
-
-            // 不抛异常 = 健康
             data.setHealthy(true);
             data.setCollections(List.of());
-
         } catch (Exception e) {
-            // 异常 = 不健康
             data.setHealthy(false);
             data.setCollections(List.of());
         }
