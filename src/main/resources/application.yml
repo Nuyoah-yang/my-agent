@@ -1,0 +1,83 @@
+server:
+  port: 9900
+
+spring:
+  application:
+    name: super-biz-agent
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/super_biz_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: '030701'
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10        # 最大连接数
+      minimum-idle: 5              # 最小空闲连接
+      connection-timeout: 30000    # 连接超时 30 秒
+      idle-timeout: 600000         # 空闲超时 10 分钟
+      max-lifetime: 1800000        # 连接最大生命周期 30 分钟
+
+  # Redis 会话记忆配置（本地最简版，不启用连接池）
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: "123456"  # 有密码就填，没有可留空或删除此行
+      database: 3
+      timeout: 3000ms
+    
+  # 你的 API Key 已经放在 IDEA 环境变量中
+  # Run Configuration -> Environment variables -> DASHSCOPE_API_KEY=xxx
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: qwen-turbo
+          temperature: 0.7
+          max-tokens: 2048
+          top-p: 0.9
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.example.super_biz_agent.domain
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+jwt:
+  issuer: super-biz-agent
+  access-token-expire-minutes: 120
+  secret-key: change-me-to-a-very-long-random-secret-key-at-least-32-chars
+# 日志
+logging:
+  level:
+    org.example: info
+    com.alibaba.cloud.ai: info
+# DashScope Embedding 预留配置（后续接向量化时会用到）
+dashscope:
+  api:
+    key: ${DASHSCOPE_API_KEY}
+  embedding:
+    model: text-embedding-v4
+
+# Milvus 预留配置（后续接入 Milvus 客户端时会用到）
+milvus:
+  enabled: false
+  host: 192.168.38.137
+  port: 19530
+  timeout: 30000
+  username: ""
+  password: ""
+  database: default
+
+# 文档分片预留配置（后续做 RAG 时使用）
+document:
+  chunk:
+    max-size: 800
+    overlap: 100
+
+chat:
+  memory:
+    ttl-minutes: 30
+    max-messages: 10
