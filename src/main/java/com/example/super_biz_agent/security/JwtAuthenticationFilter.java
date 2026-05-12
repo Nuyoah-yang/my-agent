@@ -1,6 +1,8 @@
 package com.example.super_biz_agent.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,9 +49,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
             filterChain.doFilter(request, response);
+        } catch (ExpiredJwtException e) {
+            writeUnauthorized(response, "登录已过期，请重新登录");
+        } catch (JwtException | IllegalArgumentException e) {
+            writeUnauthorized(response, "无效的登录凭证，请重新登录");
         } finally {
             // 避免线程复用导致的用户上下文串号
             UserContextHolder.clear();
         }
+    }
+
+    private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"code\":401,\"message\":\"" + message + "\",\"data\":null}");
     }
 }

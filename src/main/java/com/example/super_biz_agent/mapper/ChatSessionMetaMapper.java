@@ -6,6 +6,8 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.util.List;
+
 @Mapper
 public interface ChatSessionMetaMapper {
 
@@ -23,4 +25,11 @@ public interface ChatSessionMetaMapper {
     @Update("UPDATE chat_session_meta SET title = #{title}, last_message_at = #{lastMessageAt}, updated_at = NOW() " +
             "WHERE session_id = #{sessionId}")
     int updateSessionMeta(ChatSessionMetaEntity sessionMeta);
+
+
+    @Select("SELECT session_id, user_id, title, last_message_at, created_at, updated_at " +
+            "FROM chat_session_meta " +
+            "WHERE user_id = #{userId} " +
+            "ORDER BY updated_at DESC")
+    List<ChatSessionMetaEntity> findByUserId(Long userId);
 }

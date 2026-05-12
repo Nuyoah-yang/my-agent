@@ -42,3 +42,23 @@ CREATE TABLE IF NOT EXISTS chat_session_meta (
     KEY idx_chat_session_meta_user_updated (user_id, updated_at),
     KEY idx_chat_session_meta_last_message_at (last_message_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='聊天会话元数据表';
+
+CREATE TABLE IF NOT EXISTS chat_message(
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '消息ID（自增主键）',
+    session_id VARCHAR(64) NOT NULL COMMENT '会话ID，关联chat_session_meta',
+    user_id BIGINT NOT NULL COMMENT '会话归属用户ID',
+    role TINYINT NOT NULL COMMENT '消息角色：0-system 1-user 2-assistant',
+    content MEDIUMTEXT NOT NULL COMMENT '消息内容',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '消息创建时间',
+    CONSTRAINT fk_chat_message_session
+        FOREIGN KEY (session_id) REFERENCES chat_session_meta(session_id)
+            ON DELETE CASCADE
+            ON UPDATE RESTRICT,
+    CONSTRAINT fk_chat_message_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+            ON DELETE CASCADE
+            ON UPDATE RESTRICT,
+    -- 索引：按会话查消息，超快
+    KEY idx_chat_message_session_created (session_id, created_at),
+    KEY idx_chat_message_user_created (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='聊天消息明细表';
