@@ -6,6 +6,9 @@ import java.time.LocalDateTime;
 
 @Data
 public class ChatSessionMetaEntity {
+    /**
+     * 会话标题表
+     */
     private String sessionId;
     private Long userId;
     private String title;

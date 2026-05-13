@@ -21,11 +21,17 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
 
 
 @Service
@@ -41,6 +47,10 @@ public class ChatServiceImpl implements ChatService {
 
     @Value("${chat.memory.max-messages:10}")
     private int maxMessages;
+    @Value("${chat.prompt.base:你是一个有帮助的AI助手，请用简洁专业的中文回答。}")
+    private String baseSystemPrompt;
+    @Value("${chat.prompt.with-history:你是一个有帮助的AI助手。请结合以下历史对话继续回答，保持上下文一致。}")
+    private String historySystemPrompt;
 
     public ChatServiceImpl(ChatClient.Builder chatClientBuilder,
                            RedisChatMemoryRepository chatMemoryRepository,
@@ -87,20 +97,11 @@ public class ChatServiceImpl implements ChatService {
            List<Message> history = chatMemoryHelper.loadHistory(chatMemory, sessionId);
            String historyContext = chatMemoryHelper.buildHistoryContext(history);
 
-           String answer;
-           if (historyContext.isBlank()) {
-               answer = chatClient.prompt()
-                       .system("你是一个有帮助的AI助手，请用简洁专业的中文回答。")
-                       .user(request.getMessage())
-                       .call()
-                       .content();
-           } else {
-               answer = chatClient.prompt()
-                       .system("你是一个有帮助的AI助手。请结合以下历史对话继续回答，保持上下文一致。\n" + historyContext)
-                       .user(request.getMessage())
-                       .call()
-                       .content();
-           }
+           String answer = chatClient.prompt()
+                   .system(buildSystemPrompt(historyContext))
+                   .user(request.getMessage())
+                   .call()
+                   .content();
 
            // 显式追加 user + assistant，避免仅保存 assistant 的历史缺失问题
            chatMemoryHelper.appendRound(chatMemory, sessionId, request.getMessage(), answer);
@@ -239,6 +240,142 @@ public class ChatServiceImpl implements ChatService {
         chatSessionMetaMapper.updateTitleBySessionId(sessionId, trimmedTitle);
     }
 
+    /**
+     * 流式传输
+     * @param request
+     * @return
+     */
+    @Override
+    public SseEmitter chatStream(ChatRequest request) {
+        // 5分钟超时，覆盖普通问答和中等长度流式输出。
+        SseEmitter emitter = new SseEmitter(300000L);
+
+        // 1) 前置参数和登录态校验
+        if (request == null || request.getMessage() == null || request.getMessage().trim().isEmpty()) {
+            sendSseError(emitter, "问题内容不能为空");
+            emitter.complete();
+            return emitter;
+        }
+        Long currentUserId = UserContextHolder.getUserId();
+        if (currentUserId == null) {
+            sendSseError(emitter, "未登录或登录已过期");
+            emitter.complete();
+            return emitter;
+        }
+
+        // 2) 复用已有会话归属逻辑，确保流式接口也具备同等安全边界
+        String sessionId = chatMemoryHelper.normalizeSessionId(request.getSessionId());
+        try {
+            upsertAndValidateSessionOwnership(sessionId, currentUserId, request.getMessage());
+        } catch (Exception e) {
+            sendSseError(emitter, e.getMessage());
+            emitter.complete();
+            return emitter;
+        }
+
+        // 3) 构建聊天记忆上下文（与非流式 chat 接口一致）
+        ChatMemory chatMemory = MessageWindowChatMemory.builder()
+                .chatMemoryRepository(chatMemoryRepository)
+                .maxMessages(maxMessages)
+                .build();
+        List<Message> history = chatMemoryHelper.loadHistory(chatMemory, sessionId);
+        String historyContext = chatMemoryHelper.buildHistoryContext(history);
+
+        // 4) 订阅流式输出并累积完整答案，结束后统一写 memory + DB
+        StringBuilder fullAnswerBuilder = new StringBuilder();
+        Flux<String> stream = chatClient.prompt()
+                .system(buildSystemPrompt(historyContext))
+                .user(request.getMessage())
+                .stream()
+                .content();
+
+        final Disposable[] streamDisposable = new Disposable[1];
+        streamDisposable[0] = stream.subscribe(
+                chunk -> {
+                    if (chunk == null || chunk.isEmpty()) {
+                        return;
+                    }
+                    fullAnswerBuilder.append(chunk);
+                    sendSseContent(emitter, chunk);
+                },
+                error -> {
+                    logger.error("流式对话失败 - sessionId: {}", sessionId, error);
+                    sendSseError(emitter, "模型流式调用失败: " + error.getMessage());
+                    emitter.complete();
+                },
+                () -> {
+                    String answer = fullAnswerBuilder.toString();
+                    if (answer.isBlank()) {
+                        sendSseError(emitter, "模型未返回有效内容");
+                        emitter.complete();
+                        return;
+                    }
+
+                    // 与非流式接口保持一致：先写记忆，再异步落库（可用性优先）
+                    chatMemoryHelper.appendRound(chatMemory, sessionId, request.getMessage(), answer);
+                    try {
+                        chatMessagePersistenceService.saveRoundMessages(sessionId, currentUserId, request.getMessage(), answer);
+                    } catch (Exception e) {
+                        logger.error("流式消息持久化失败，已降级继续返回 - sessionId: {}, userId: {}", sessionId, currentUserId, e);
+                    }
+
+                    sendSseDone(emitter);
+                    emitter.complete();
+                }
+        );
+
+        // 5) 连接结束时释放订阅，避免资源泄露
+        emitter.onCompletion(() -> {
+            if (streamDisposable[0] != null && !streamDisposable[0].isDisposed()) {
+                streamDisposable[0].dispose();
+            }
+        });
+        emitter.onTimeout(() -> {
+            if (streamDisposable[0] != null && !streamDisposable[0].isDisposed()) {
+                streamDisposable[0].dispose();
+            }
+            sendSseError(emitter, "流式响应超时");
+            emitter.complete();
+        });
+
+        return emitter;
+    }
+
+    /**
+     * SSE content 事件：前端会将 data 拼接成实时回答。
+     */
+    private void sendSseContent(SseEmitter emitter, String chunk) {
+        sendSseMessage(emitter, "content", chunk);
+    }
+
+    /**
+     * SSE done 事件：标记流式输出结束。
+     */
+    private void sendSseDone(SseEmitter emitter) {
+        sendSseMessage(emitter, "done", null);
+    }
+
+    /**
+     * SSE error 事件：前端可按统一协议展示错误提示。
+     */
+    private void sendSseError(SseEmitter emitter, String errorMessage) {
+        sendSseMessage(emitter, "error", errorMessage == null ? "未知错误" : errorMessage);
+    }
+
+    /**
+     * 统一 SSE 消息格式：{"type":"content|done|error","data":...}
+     */
+    private void sendSseMessage(SseEmitter emitter, String type, String data) {
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("type", type);
+            payload.put("data", data);
+            emitter.send(SseEmitter.event().name("message").data(payload, MediaType.APPLICATION_JSON));
+        } catch (Exception e) {
+            logger.warn("SSE消息发送失败 - type: {}, error: {}", type, e.getMessage());
+        }
+    }
+
     private void upsertAndValidateSessionOwnership(String sessionId, Long userId, String message) {
         ChatSessionMetaEntity existing = chatSessionMetaMapper.findBySessionId(sessionId);
         if (existing == null) {
@@ -264,6 +401,16 @@ public class ChatServiceImpl implements ChatService {
         }
         existing.setLastMessageAt(LocalDateTime.now());
         chatSessionMetaMapper.updateSessionMeta(existing);
+    }
+
+    /**
+     * 统一构建系统提示词，避免业务流程中散落字符串拼接。
+     */
+    private String buildSystemPrompt(String historyContext) {
+        if (historyContext == null || historyContext.isBlank()) {
+            return baseSystemPrompt;
+        }
+        return historySystemPrompt + "\n" + historyContext;
     }
 
     private String buildTitle(String message) {

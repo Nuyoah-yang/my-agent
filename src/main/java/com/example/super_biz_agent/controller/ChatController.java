@@ -10,6 +10,7 @@ import com.example.super_biz_agent.service.ChatService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -52,6 +53,11 @@ public class ChatController {
         // 仅更新标题字段，详细参数校验与归属校验在 service 层完成。
         chatService.renameSession(sessionId, request.getTitle());
         return ApiResponse.success("重命名成功");
+    }
+
+    @PostMapping(value = "/chat_stream", produces = "text/event-stream;charset=UTF-8")
+    public SseEmitter chatStream(@RequestBody ChatRequest request) {
+        return chatService.chatStream(request);
     }
 
 }
