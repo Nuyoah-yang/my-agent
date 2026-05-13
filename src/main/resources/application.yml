@@ -84,3 +84,8 @@ chat:
   prompt:
     base: 你是一个有帮助的AI助手，请用简洁专业的中文回答。
     with-history: 你是一个有帮助的AI助手。请结合以下历史对话继续回答，保持上下文一致。
+
+file:
+  upload:
+    path: ./uploads
+    allowed-extensions: txt,md
