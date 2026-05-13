@@ -63,8 +63,8 @@ dashscope:
 
 # Milvus 预留配置（后续接入 Milvus 客户端时会用到）
 milvus:
-  enabled: false
-  host: 192.168.38.137
+  enabled: true
+  host: 172.16.32.54
   port: 19530
   timeout: 30000
   username: ""

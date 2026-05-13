@@ -15,7 +15,7 @@ import java.util.List;
 @Service
 public class MilvusServiceImpl implements MilvusService {
 
-    @Autowired(required = false)
+    @Autowired
     private MilvusClient milvusClient;
 
     @Override

@@ -3,6 +3,7 @@ package com.example.super_biz_agent.service.serviceImpl;
 import com.example.super_biz_agent.config.FileUploadConfig;
 import com.example.super_biz_agent.dto.FileUploadRes;
 import com.example.super_biz_agent.service.FileUploadService;
+import com.example.super_biz_agent.service.VectorIndexService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,9 @@ import static com.google.common.io.Files.getFileExtension;
 public class FileUploadServiceImpl implements FileUploadService {
     @Autowired
     private FileUploadConfig fileUploadConfig;
+
+    @Autowired
+    private VectorIndexService vectorIndexService;
     @Override
     public FileUploadRes upload(MultipartFile file) {
         if(file.isEmpty()){
@@ -54,7 +58,13 @@ public class FileUploadServiceImpl implements FileUploadService {
             Files.copy(file.getInputStream(), filePath);
             log.info("文件上传成功: {}", filePath);
 
-            //todo 文件上传成功后，自动调用向量索引服务
+            // 文件上传成功后，异步触发向量索引（索引失败不影响上传结果）
+            try {
+                vectorIndexService.indexSingleFile(filePath.toString());
+                log.info("向量索引已触发: {}", filePath);
+            } catch (Exception e) {
+                log.error("向量索引失败: {}, 错误: {}", filePath, e.getMessage(), e);
+            }
 
             FileUploadRes response = new FileUploadRes(
                     originalFilename,
