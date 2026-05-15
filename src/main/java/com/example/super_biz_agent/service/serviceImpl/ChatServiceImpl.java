@@ -16,10 +16,18 @@ import com.example.super_biz_agent.service.ChatMessagePersistenceService;
 import com.example.super_biz_agent.service.ChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
+import com.alibaba.cloud.ai.graph.NodeOutput;
+import com.alibaba.cloud.ai.graph.agent.Builder;
+import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
+import com.alibaba.cloud.ai.graph.streaming.OutputType;
+import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
+import com.example.super_biz_agent.agent.tool.RagSearchTool;
+import com.example.super_biz_agent.config.RagConfigProperties;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -38,7 +46,9 @@ import reactor.core.publisher.Flux;
 public class ChatServiceImpl implements ChatService {
     private static final Logger logger = LoggerFactory.getLogger(ChatServiceImpl.class);
 
-    private final ChatClient chatClient;
+    private final ChatModel chatModel;
+    private final RagSearchTool ragSearchTool;
+    private final RagConfigProperties ragConfig;
     private final ChatMemoryRepository chatMemoryRepository;
     private final ChatMemoryHelper chatMemoryHelper;
     private final ChatMessageMapper chatMessageMapper;
@@ -52,19 +62,26 @@ public class ChatServiceImpl implements ChatService {
     @Value("${chat.prompt.with-history:你是一个有帮助的AI助手。请结合以下历史对话继续回答，保持上下文一致。}")
     private String historySystemPrompt;
 
-    public ChatServiceImpl(ChatClient.Builder chatClientBuilder,
+    @Value("${chat.prompt.base-with-rag:你是一个业务知识助手。你可以使用 queryInternalDocs 工具搜索知识库中的文档来获取信息。}")
+    private String baseSystemPromptWithRag;
+
+    public ChatServiceImpl(ChatModel chatModel,
+                           RagSearchTool ragSearchTool,
+                           RagConfigProperties ragConfig,
                            RedisChatMemoryRepository chatMemoryRepository,
                            ChatMemoryHelper chatMemoryHelper,
                            ChatMessageMapper chatMessageMapper,
                            ChatSessionMetaMapper chatSessionMetaMapper,
                            ChatMessagePersistenceService chatMessagePersistenceService
                            ) {
-        this.chatClient = chatClientBuilder.build();
+        this.chatModel = chatModel;
+        this.ragSearchTool = ragSearchTool;
+        this.ragConfig = ragConfig;
         this.chatMemoryRepository = chatMemoryRepository;
         this.chatMemoryHelper = chatMemoryHelper;
         this.chatMessageMapper = chatMessageMapper;
         this.chatSessionMetaMapper = chatSessionMetaMapper;
-        this.chatMessagePersistenceService=chatMessagePersistenceService;
+        this.chatMessagePersistenceService = chatMessagePersistenceService;
     }
 
     @Override
@@ -97,11 +114,8 @@ public class ChatServiceImpl implements ChatService {
            List<Message> history = chatMemoryHelper.loadHistory(chatMemory, sessionId);
            String historyContext = chatMemoryHelper.buildHistoryContext(history);
 
-           String answer = chatClient.prompt()
-                   .system(buildSystemPrompt(historyContext))
-                   .user(request.getMessage())
-                   .call()
-                   .content();
+           ReactAgent agent = createAgent(buildSystemPrompt(historyContext));
+           String answer = agent.call(request.getMessage()).getText();
 
            // 显式追加 user + assistant，避免仅保存 assistant 的历史缺失问题
            chatMemoryHelper.appendRound(chatMemory, sessionId, request.getMessage(), answer);
@@ -283,20 +297,39 @@ public class ChatServiceImpl implements ChatService {
 
         // 4) 订阅流式输出并累积完整答案，结束后统一写 memory + DB
         StringBuilder fullAnswerBuilder = new StringBuilder();
-        Flux<String> stream = chatClient.prompt()
-                .system(buildSystemPrompt(historyContext))
-                .user(request.getMessage())
-                .stream()
-                .content();
+        Flux<NodeOutput> stream;
+        try {
+            ReactAgent agent = createAgent(buildSystemPrompt(historyContext));
+            stream = agent.stream(request.getMessage());
+        } catch (GraphRunnerException e) {
+            logger.error("ReactAgent 流式启动失败 - sessionId: {}", sessionId, e);
+            sendSseError(emitter, "代理引擎启动失败: " + e.getMessage());
+            emitter.complete();
+            return emitter;
+        }
 
         final Disposable[] streamDisposable = new Disposable[1];
         streamDisposable[0] = stream.subscribe(
-                chunk -> {
-                    if (chunk == null || chunk.isEmpty()) {
-                        return;
+                output -> {
+                    try {
+                        if (output instanceof StreamingOutput streamingOutput) {
+                            OutputType type = streamingOutput.getOutputType();
+
+                            if (type == OutputType.AGENT_MODEL_STREAMING) {
+                                String chunk = streamingOutput.message().getText();
+                                if (chunk != null && !chunk.isEmpty()) {
+                                    fullAnswerBuilder.append(chunk);
+                                    sendSseContent(emitter, chunk);
+                                }
+                            } else if (type == OutputType.AGENT_MODEL_FINISHED) {
+                                logger.debug("ReactAgent 模型推理完成");
+                            } else if (type == OutputType.AGENT_TOOL_FINISHED) {
+                                logger.info("ReactAgent 工具调用完成: {}", output.node());
+                            }
+                        }
+                    } catch (Exception e) {
+                        logger.warn("处理流式输出事件失败", e);
                     }
-                    fullAnswerBuilder.append(chunk);
-                    sendSseContent(emitter, chunk);
                 },
                 error -> {
                     logger.error("流式对话失败 - sessionId: {}", sessionId, error);
@@ -404,13 +437,32 @@ public class ChatServiceImpl implements ChatService {
     }
 
     /**
-     * 统一构建系统提示词，避免业务流程中散落字符串拼接。
+     * Create a ReactAgent for the current request.
+     * When RAG is disabled, no tools are registered (agent behaves like plain ChatModel).
+     */
+    private ReactAgent createAgent(String systemPrompt) {
+        Builder builder = ReactAgent.builder()
+                .name("super_biz_agent")
+                .model(chatModel)
+                .systemPrompt(systemPrompt);
+
+        if (ragConfig.isEnabled()) {
+            builder.methodTools(new Object[]{ragSearchTool});
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * 统一构建系统提示词，根据 RAG 开关选择 base prompt。
      */
     private String buildSystemPrompt(String historyContext) {
+        String basePrompt = ragConfig.isEnabled() ? baseSystemPromptWithRag : baseSystemPrompt;
+
         if (historyContext == null || historyContext.isBlank()) {
-            return baseSystemPrompt;
+            return basePrompt;
         }
-        return historySystemPrompt + "\n" + historyContext;
+        return basePrompt + "\n\n--- 历史对话 ---\n" + historyContext + "\n--- 历史对话结束 ---\n请基于以上历史对话继续回答。";
     }
 
     private String buildTitle(String message) {

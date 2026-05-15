@@ -22,6 +22,7 @@
 		<spring-ai.version>1.1.0</spring-ai.version>
 		<spring-ai-alibaba.version>1.1.0.0-RC2</spring-ai-alibaba.version>
 		<spring-ai-alibaba-extensions.version>1.1.0.0-RC2</spring-ai-alibaba-extensions.version>
+		<jackson.version>2.18.2</jackson.version>
 	</properties>
 
 	<!-- 正确仓库配置 -->
@@ -51,6 +52,14 @@
 
 	<dependencyManagement>
 		<dependencies>
+			<!-- Jackson BOM 必须在最前面，优先于其他 BOM 中声明的旧版本 -->
+			<dependency>
+				<groupId>com.fasterxml.jackson</groupId>
+				<artifactId>jackson-bom</artifactId>
+				<version>2.18.2</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
 			<dependency>
 				<groupId>org.springframework.ai</groupId>
 				<artifactId>spring-ai-bom</artifactId>

@@ -84,6 +84,10 @@ chat:
   prompt:
     base: 你是一个有帮助的AI助手，请用简洁专业的中文回答。
     with-history: 你是一个有帮助的AI助手。请结合以下历史对话继续回答，保持上下文一致。
+    base-with-rag: 你是一个业务知识助手，请用简洁专业的中文回答。你拥有一个名为 queryInternalDocs 的工具，可以用来搜索内部知识库中的相关文档。当用户询问涉及公司内部流程、技术文档、最佳实践、操作指南等问题时，请主动调用 queryInternalDocs 工具获取相关信息，然后基于检索结果给出准确的回答。如果知识库中没有找到相关信息，请如实告知用户。
+  rag:
+    enabled: true
+    top-k: 3
 
 file:
   upload:
