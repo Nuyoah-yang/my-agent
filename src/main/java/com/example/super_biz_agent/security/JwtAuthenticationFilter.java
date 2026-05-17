@@ -27,6 +27,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.jwtService = jwtService;
     }
 
+    /**
+     * SSE/异步请求会触发 async dispatch。默认 OncePerRequestFilter 不会再次执行，
+     * 会导致异步阶段丢失认证信息。这里显式返回 false，确保异步分发也做 JWT 鉴权。
+     */
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,

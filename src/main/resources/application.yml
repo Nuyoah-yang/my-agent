@@ -93,3 +93,8 @@ file:
   upload:
     path: ./uploads
     allowed-extensions: txt,md
+
+prometheus:
+  base-url: http://172.16.32.54:9090
+  timeout: 10
+  mock-enabled: false

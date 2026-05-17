@@ -179,3 +179,25 @@ src/main/java/com/example/super_biz_agent/
 6. 完成用户注册/登录并获取 JWT
 7. 上传知识库文件（txt/md），观察日志确认分片→向量→入库成功
 8. 使用 JWT 调用 chat 接口，验证多轮记忆与越权拦截
+
+---
+
+## AIOps 监控中心（模拟真实场景）
+
+你可以把虚拟机中的 Milvus 作为运维对象，再通过 Prometheus 作为监控中心供 AIOps 分析。
+
+已提供最小模板：
+
+- `ops/monitoring/docker-compose.monitoring.yml`
+- `ops/monitoring/prometheus.yml`
+- `ops/monitoring/alert_rules.yml`
+- `ops/monitoring/README.md`
+
+快速步骤：
+
+1. 在 `ops/monitoring/prometheus.yml` 中把 Milvus 目标地址改成虚拟机实际地址；
+2. 启动 Prometheus：`docker compose -f ops/monitoring/docker-compose.monitoring.yml up -d`；
+3. 后端改为真实模式：
+   - `prometheus.mock-enabled: false`
+   - `prometheus.base-url` 指向 Prometheus 地址；
+4. 调用 `POST /api/chat/ai_ops` 验证告警分析链路。

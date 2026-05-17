@@ -6,6 +6,7 @@ import com.example.super_biz_agent.dto.ChatRequest;
 import com.example.super_biz_agent.dto.ChatResponse;
 import com.example.super_biz_agent.dto.ChatSessionRenameRequest;
 import com.example.super_biz_agent.dto.ChatSessionItem;
+import com.example.super_biz_agent.service.AiOpsService;
 import com.example.super_biz_agent.service.ChatService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,9 @@ import java.util.List;
 public class ChatController {
     @Autowired
     private ChatService chatService;
+
+    @Autowired
+    private AiOpsService aiOpsService;
 
     @PostMapping
     public ApiResponse<ChatResponse> chat(@RequestBody ChatRequest request){
@@ -60,4 +64,8 @@ public class ChatController {
         return chatService.chatStream(request);
     }
 
+    @PostMapping(value = "/ai_ops", produces = "text/event-stream;charset=UTF-8")
+    public SseEmitter aiOps(){
+        return aiOpsService.aiOps();
+    }
 }

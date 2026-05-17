@@ -7,6 +7,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 
 /**
  * 全局异常处理器：
@@ -38,6 +39,21 @@ public class GlobalExceptionHandler {
         }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(400, e.getMessage()));
+    }
+
+    /**
+     * 请求 Content-Type 不匹配时返回明确提示，方便前后端联调。
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<?> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e,
+                                                         HttpServletRequest request) {
+        String message = "请求 Content-Type 不支持。/api/chat 与 /api/chat/chat_stream 请使用 application/json；"
+                + "/api/upload 请使用 multipart/form-data。";
+        if (isSseRequest(request)) {
+            return buildSseError(HttpStatus.UNSUPPORTED_MEDIA_TYPE, message);
+        }
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(ApiResponse.error(415, message));
     }
 
     /**
