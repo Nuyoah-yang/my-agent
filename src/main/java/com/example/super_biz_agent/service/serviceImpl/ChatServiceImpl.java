@@ -2,10 +2,9 @@ package com.example.super_biz_agent.service.serviceImpl;
 
 
 import com.example.super_biz_agent.domain.ChatSessionMetaEntity;
-import com.example.super_biz_agent.dto.ApiResponse;
 import com.example.super_biz_agent.dto.ChatMessageItem;
 import com.example.super_biz_agent.dto.ChatRequest;
-import com.example.super_biz_agent.dto.ChatResponse;
+import com.example.super_biz_agent.dto.ChatResult;
 import com.example.super_biz_agent.dto.ChatSessionItem;
 import com.example.super_biz_agent.mapper.ChatMessageMapper;
 import com.example.super_biz_agent.mapper.ChatSessionMetaMapper;
@@ -85,57 +84,63 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public ApiResponse<ChatResponse> chat(ChatRequest request) {
-       try{
-           logger.info("收到对话请求 - SessionId: {}, Question: {}", request.getSessionId(), request.getMessage());
+    public ChatResult chat(ChatRequest request) {
+        Long currentUserId = UserContextHolder.getUserId();
+        String sessionId = chatMemoryHelper.normalizeSessionId(request.getSessionId());
+
+        try {
+            logger.info("收到对话请求 - SessionId: {}, UserId: {}, Question: {}", sessionId, currentUserId, request.getMessage());
+
             // 参数校验：问题内容不能为空
-           if(request.getMessage()==null||request.getMessage().trim().isEmpty()){
-               logger.warn("message内容为空");
-               return ApiResponse.success(ChatResponse.error("问题内容不能为空",request.getSessionId()));
-           }
+            if (request.getMessage() == null || request.getMessage().trim().isEmpty()) {
+                logger.warn("消息内容为空 - SessionId: {}, UserId: {}", sessionId, currentUserId);
+                throw new IllegalArgumentException("问题内容不能为空");
+            }
 
-           // 当前用户来自 JWT 解析结果，用于会话归属校验
-           Long currentUserId = UserContextHolder.getUserId();
-           if (currentUserId == null) {
-               return ApiResponse.error("未登录或登录已过期");
-           }
+            // 当前用户来自 JWT 解析结果，用于会话归属校验
+            if (currentUserId == null) {
+                logger.warn("用户未登录 - SessionId: {}", sessionId);
+                throw new SecurityException("未登录或登录已过期");
+            }
 
-           // 归一化 sessionId（为空则生成），并写入/校验会话归属元数据
-           String sessionId = chatMemoryHelper.normalizeSessionId(request.getSessionId());
-           upsertAndValidateSessionOwnership(sessionId, currentUserId, request.getMessage());
+            // 归一化 sessionId（为空则生成），并写入/校验会话归属元数据
+            upsertAndValidateSessionOwnership(sessionId, currentUserId, request.getMessage());
 
-           // 聊天记忆窗口由 MessageWindowChatMemory 控制（当前 10 条）
-           ChatMemory chatMemory = MessageWindowChatMemory.builder()
-                   .chatMemoryRepository(chatMemoryRepository)
-                   .maxMessages(maxMessages)
-                   .build();
+            // 聊天记忆窗口由 MessageWindowChatMemory 控制
+            ChatMemory chatMemory = MessageWindowChatMemory.builder()
+                    .chatMemoryRepository(chatMemoryRepository)
+                    .maxMessages(maxMessages)
+                    .build();
 
-           // 读取历史并构造上下文提示，保证多轮连贯
-           List<Message> history = chatMemoryHelper.loadHistory(chatMemory, sessionId);
-           String historyContext = chatMemoryHelper.buildHistoryContext(history);
+            // 读取历史并构造上下文提示，保证多轮连贯
+            List<Message> history = chatMemoryHelper.loadHistory(chatMemory, sessionId);
+            String historyContext = chatMemoryHelper.buildHistoryContext(history);
 
-           ReactAgent agent = createAgent(buildSystemPrompt(historyContext));
-           String answer = agent.call(request.getMessage()).getText();
+            ReactAgent agent = createAgent(buildSystemPrompt(historyContext));
+            String answer = agent.call(request.getMessage()).getText();
 
-           // 显式追加 user + assistant，避免仅保存 assistant 的历史缺失问题
-           chatMemoryHelper.appendRound(chatMemory, sessionId, request.getMessage(), answer);
+            // 显式追加 user + assistant，避免仅保存 assistant 的历史缺失问题
+            chatMemoryHelper.appendRound(chatMemory, sessionId, request.getMessage(), answer);
 
-           try {
-               chatMessagePersistenceService.saveRoundMessages(sessionId, currentUserId, request.getMessage(), answer);
-           } catch (Exception e) {
-               // 可用性优先：落库失败不影响本次对话返回
-               logger.error("消息持久化失败，已降级继续返回 - sessionId: {}, userId: {}", sessionId, currentUserId, e);
-           }
+            try {
+                chatMessagePersistenceService.saveRoundMessages(sessionId, currentUserId, request.getMessage(), answer);
+            } catch (Exception e) {
+                // 可用性优先：落库失败不影响本次对话返回
+                logger.error("消息持久化失败，已降级继续返回 - sessionId: {}, userId: {}", sessionId, currentUserId, e);
+            }
 
-
-           return ApiResponse.success(ChatResponse.success(answer,sessionId));
-       }catch (SecurityException e){
-           logger.warn("会话归属校验失败: {}", e.getMessage());
-           return ApiResponse.error(e.getMessage());
-       }catch (Exception e){
-           logger.error("对话失败",e);
-           return ApiResponse.success(ChatResponse.error("模型调用失败: " + e.getMessage(),request.getSessionId()));
-       }
+            logger.info("对话成功 - SessionId: {}, UserId: {}", sessionId, currentUserId);
+            return new ChatResult(answer, sessionId);
+        } catch (SecurityException e) {
+            logger.warn("会话归属校验失败 - SessionId: {}, UserId: {}, Error: {}", sessionId, currentUserId, e.getMessage());
+            throw e;
+        } catch (IllegalArgumentException e) {
+            logger.warn("参数校验失败 - SessionId: {}, UserId: {}, Error: {}", sessionId, currentUserId, e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            logger.error("模型调用失败 - SessionId: {}, UserId: {}, Error: {}", sessionId, currentUserId, e.getMessage(), e);
+            throw new RuntimeException("模型调用失败: " + e.getMessage(), e);
+        }
     }
 
     /**
