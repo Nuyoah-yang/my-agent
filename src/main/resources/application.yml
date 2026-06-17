@@ -29,8 +29,19 @@ spring:
   # 你的 API Key 已经放在 IDEA 环境变量中
   # Run Configuration -> Environment variables -> DASHSCOPE_API_KEY=xxx
   ai:
+    retry:
+      max-attempts: 3           # 最大重试次数
+      backoff:
+        initial-interval: 1000   # 初始重试间隔 1秒
+        multiplier: 2.0         # 间隔倍增系数
+        max-interval: 10000     # 最大重试间隔 10秒
+    http-client:
+      connect-timeout: 30000      # 连接超时 30秒
+      read-timeout: 120000       # 读取超时 120秒
+      write-timeout: 60000       # 写入超时 60秒
     dashscope:
       api-key: ${DASHSCOPE_API_KEY}
+      timeout: 60000  # 60秒超时，解决网络不稳定问题
       chat:
         options:
           model: qwen-turbo
@@ -64,7 +75,7 @@ dashscope:
 # Milvus 预留配置（后续接入 Milvus 客户端时会用到）
 milvus:
   enabled: true
-  host: 172.16.32.54
+  host: 47.108.145.199
   port: 19530
   timeout: 30000
   username: ""
@@ -97,4 +108,4 @@ file:
 prometheus:
   base-url: http://172.16.32.54:9090
   timeout: 10
-  mock-enabled: false
+  mock-enabled: true

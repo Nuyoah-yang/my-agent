@@ -120,26 +120,69 @@ public class QueryMetricsTools {
     }
 
     private List<SimplifiedAlert> buildMockAlerts() {
-        List<SimplifiedAlert> alerts = new ArrayList<>();
         Instant now = Instant.now();
-
+        
+        // 定义所有可用的告警场景
+        List<SimplifiedAlert> allAlerts = new ArrayList<>();
+        
+        // CPU 使用率过高
         SimplifiedAlert cpuAlert = new SimplifiedAlert();
         cpuAlert.setAlertName("HighCPUUsage");
-        cpuAlert.setDescription("payment-service CPU 使用率持续超过 80%，当前 92%。");
+        cpuAlert.setDescription("payment-service CPU 使用率持续超过 80%，当前 92%。建议检查是否有异常进程或流量突增。");
         cpuAlert.setState("firing");
         cpuAlert.setActiveAt(now.minus(25, ChronoUnit.MINUTES).toString());
         cpuAlert.setDuration(calculateDuration(cpuAlert.getActiveAt()));
-        alerts.add(cpuAlert);
+        allAlerts.add(cpuAlert);
 
+        // 响应时间慢
         SimplifiedAlert slowAlert = new SimplifiedAlert();
         slowAlert.setAlertName("SlowResponse");
-        slowAlert.setDescription("user-service P99 响应时间超过 3 秒，当前 4.2 秒。");
+        slowAlert.setDescription("user-service P99 响应时间超过 3 秒，当前 4.2 秒。可能存在数据库查询慢或线程池阻塞。");
         slowAlert.setState("firing");
         slowAlert.setActiveAt(now.minus(10, ChronoUnit.MINUTES).toString());
         slowAlert.setDuration(calculateDuration(slowAlert.getActiveAt()));
-        alerts.add(slowAlert);
+        allAlerts.add(slowAlert);
 
-        return alerts;
+        // 内存使用率过高
+        SimplifiedAlert memoryAlert = new SimplifiedAlert();
+        memoryAlert.setAlertName("HighMemoryUsage");
+        memoryAlert.setDescription("order-service 内存使用率达 94%，超过阈值 85%。可能存在内存泄漏或缓存过大。");
+        memoryAlert.setState("firing");
+        memoryAlert.setActiveAt(now.minus(45, ChronoUnit.MINUTES).toString());
+        memoryAlert.setDuration(calculateDuration(memoryAlert.getActiveAt()));
+        allAlerts.add(memoryAlert);
+
+        // 数据库连接池耗尽
+        SimplifiedAlert dbConnAlert = new SimplifiedAlert();
+        dbConnAlert.setAlertName("DatabaseConnectionPoolExhausted");
+        dbConnAlert.setDescription("inventory-service 数据库连接池已耗尽（最大 20，当前使用 20）。导致新请求无法获取连接。");
+        dbConnAlert.setState("firing");
+        dbConnAlert.setActiveAt(now.minus(5, ChronoUnit.MINUTES).toString());
+        dbConnAlert.setDuration(calculateDuration(dbConnAlert.getActiveAt()));
+        allAlerts.add(dbConnAlert);
+
+        // Redis 连接超时
+        SimplifiedAlert redisAlert = new SimplifiedAlert();
+        redisAlert.setAlertName("RedisConnectionTimeout");
+        redisAlert.setDescription("chat-service Redis 连接超时，最近 5 分钟内发生 12 次超时。可能是 Redis 服务压力过大。");
+        redisAlert.setState("firing");
+        redisAlert.setActiveAt(now.minus(15, ChronoUnit.MINUTES).toString());
+        redisAlert.setDuration(calculateDuration(redisAlert.getActiveAt()));
+        allAlerts.add(redisAlert);
+
+        // 服务实例不可用
+        SimplifiedAlert instanceDown = new SimplifiedAlert();
+        instanceDown.setAlertName("InstanceDown");
+        instanceDown.setDescription("logistics-service-02 实例已离线超过 5 分钟。请检查服务器状态或容器健康。");
+        instanceDown.setState("firing");
+        instanceDown.setActiveAt(now.minus(8, ChronoUnit.MINUTES).toString());
+        instanceDown.setDuration(calculateDuration(instanceDown.getActiveAt()));
+        allAlerts.add(instanceDown);
+        
+        // 随机选择 2-4 个告警
+        int count = 2 + new java.util.Random().nextInt(3); // 随机选择 2、3 或 4 个
+        java.util.Collections.shuffle(allAlerts);
+        return allAlerts.subList(0, Math.min(count, allAlerts.size()));
     }
 
     private String calculateDuration(String activeAtStr) {
