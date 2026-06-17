@@ -1,0 +1,23 @@
+groups:
+  - name: milvus_alerts
+    interval: 90s
+    rules:
+      - alert: MilvusTargetDown
+        expr: up{job="milvus"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: milvus
+        annotations:
+          summary: "Milvus 监控目标不可达"
+          description: "Prometheus 连续 1 分钟无法抓取 Milvus metrics。"
+
+      - alert: MilvusHighScrapeDuration
+        expr: scrape_duration_seconds{job="milvus"} > 2
+        for: 2m
+        labels:
+          severity: warning
+          service: milvus
+        annotations:
+          summary: "Milvus 抓取耗时过高"
+          description: "Milvus metrics 抓取耗时超过 2 秒，可能存在网络抖动或实例压力。"

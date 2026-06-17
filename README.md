@@ -172,7 +172,7 @@ src/main/java/com/example/super_biz_agent/
 ## 本地联调建议
 
 1. 启动 MySQL + Redis（确保 `application.yml` 中连接信息可连通）
-2. 启动 Milvus：`docker compose -f vector-database.yml up -d`
+2. 启动 Milvus：`docker compose -f ops/vector-database.yml up -d`
 3. 配置环境变量 `DASHSCOPE_API_KEY`
 4. `application.yml` 中设置 `milvus.enabled: true`，`file.upload.path` 改为绝对路径
 5. 启动后端服务
