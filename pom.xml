@@ -232,7 +232,7 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
-					<mainClass>org.example.Main</mainClass>
+					<mainClass>com.example.super_biz_agent.SuperBizAgentApplication</mainClass>
 				</configuration>
 			</plugin>
 		</plugins>

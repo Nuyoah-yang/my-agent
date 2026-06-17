@@ -59,7 +59,7 @@ mybatis:
 jwt:
   issuer: super-biz-agent
   access-token-expire-minutes: 120
-  secret-key: change-me-to-a-very-long-random-secret-key-at-least-32-chars
+  secret-key: ${JWT_SECRET_KEY}
 # 日志
 logging:
   level:
