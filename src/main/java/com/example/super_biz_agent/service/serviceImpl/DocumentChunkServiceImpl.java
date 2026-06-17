@@ -62,7 +62,7 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
      * 按 Markdown 标题将文档拆分为若干章节。
      * 每个章节以标题行开始，包含该标题下的全部正文。
      */
-    private List<Section> splitByHeadings(String content) {
+    List<Section> splitByHeadings(String content) {
         List<Section> sections = new ArrayList<>();
         //用定义的正则去拆分内容
         Matcher matcher = HEADING_PATTERN.matcher(content);
@@ -108,7 +108,7 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
      * @param startChunkIndex  起始分片编号
      * @return 该章节产生的分片列表
      */
-    private List<DocumentChunk> chunkSection(Section section, int startChunkIndex) {
+    List<DocumentChunk> chunkSection(Section section, int startChunkIndex) {
         List<DocumentChunk> chunks = new ArrayList<>();
         String content = section.content;
         String title = section.title;
@@ -174,7 +174,7 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
     /**
      * 按双换行（空行）拆分段落，保留 markdown 代码块等结构的完整性。
      */
-    private List<String> splitByParagraphs(String content) {
+    List<String> splitByParagraphs(String content) {
         List<String> paragraphs = new ArrayList<>();
         String[] parts = content.split("\n\n+");
         for (String part : parts) {
@@ -192,7 +192,7 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
      * 从文本末尾截取 overlap 个字符，作为下一个分片的开头。
      * 优先在句末标点（。？！）处断开，保持语义完整。
      */
-    private String getOverlapText(String text) {
+    String getOverlapText(String text) {
         int overlapSize = Math.min(chunkConfig.getOverlap(), text.length());
         if (overlapSize <= 0) {
             return "";
@@ -219,7 +219,7 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
     /**
      * 章节 — 按标题切分后的中间产物，仅分片流程内部使用。
      */
-    private static class Section {
+    static class Section {
         String title;
         String content;
         int startIndex;   // 在原文档中的起始字符位置
